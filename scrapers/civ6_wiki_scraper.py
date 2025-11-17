@@ -241,41 +241,12 @@ class Civ6WikiScraper:
 
 
 def main():
-    """Example usage"""
+    """Scrape everything and save to data/raw"""
     scraper = Civ6WikiScraper()
     
-    # Option 1: Scrape everything (takes a while!)
-    # all_data = scraper.scrape_all()
-    # scraper.save_to_json(all_data, "civ6_complete_data.json")
-    
-    # Option 2: Scrape specific category
-    print("Scraping civilizations...")
-    civs = scraper.scrape_category(
-        'civilizations',
-        'https://civilization.fandom.com/wiki/Category:Civilizations_(Civ6)'
-    )
-    scraper.save_to_json({'civilizations': civs}, "civ6_civilizations.json")
-    
-    # Option 3: Scrape a specific page
-    print("\nScraping Greece page as example...")
-    greece_data = scraper.extract_page_content(
-        'https://civilization.fandom.com/wiki/Greek_(Civ6)',
-        'civilization'
-    )
-    
-    if greece_data:
-        print(f"\nExtracted data for: {greece_data['title']}")
-        print(f"Number of sections: {len(greece_data['sections'])}")
-        print(f"\nSection headings:")
-        for section in greece_data['sections']:
-            print(f"  - {section['heading']}")
-        
-        print(f"\nMetadata:")
-        for key, value in greece_data['metadata'].items():
-            print(f"  {key}: {value}")
-        
-        # Save example
-        scraper.save_to_json(greece_data, "greece_example.json")
+    print("Starting full wiki scrape...")
+    all_data = scraper.scrape_all()
+    scraper.save_to_json(all_data, "data/raw/civ6_wiki/civ6_complete_data.json")
 
 
 if __name__ == "__main__":
