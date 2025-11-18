@@ -165,6 +165,54 @@ class BBGWikiScraper:
         
         return sections
     
+    def extract_governors(self, soup: BeautifulSoup) -> List[Dict[str, Any]]:
+        """Extract governors - each promotion as a separate subsection"""
+        sections = []
+        
+        # Find all chart divs (each is a governor)
+        chart_divs = soup.find_all('div', class_='chart')
+        
+        for div in chart_divs:
+            # Find governor name (h2.civ-name)
+            h2 = div.find('h2', class_='civ-name')
+            
+            if not h2:
+                continue
+            
+            governor_name = self.clean_text(h2.get_text())
+            
+            if not governor_name:
+                continue
+            
+            # Find all promotions (h3.civ-ability-name) within this governor
+            promotions = div.find_all('h3', class_='civ-ability-name')
+            
+            for h3 in promotions:
+                # Get promotion name - it's the text before the <br> or <p> tag
+                promotion_text = ""
+                for child in h3.children:
+                    if child.name == 'br':
+                        break
+                    if child.name == 'p':
+                        break
+                    if isinstance(child, str):
+                        promotion_text += child
+                
+                promotion_name = self.clean_text(promotion_text)
+                
+                # Get the promotion description (p.civ-ability-desc within the h3)
+                desc_elem = h3.find('p', class_='civ-ability-desc')
+                
+                if desc_elem:
+                    description = self.clean_text(desc_elem.get_text())
+                    
+                    if promotion_name and description:
+                        sections.append({
+                            'heading': f"{governor_name}: {promotion_name}",
+                            'content': [description]
+                        })
+        
+        return sections
     def extract_generic(self, soup: BeautifulSoup) -> List[Dict[str, Any]]:
         """Generic extraction for other page types"""
         sections = []
@@ -213,6 +261,8 @@ class BBGWikiScraper:
             sections = self.extract_city_states(soup)
         elif page_name == 'religion':
             sections = self.extract_religion(soup)
+        elif page_name == 'governor':
+            sections = self.extract_governors(soup)
         else:
             sections = self.extract_generic(soup)
         
