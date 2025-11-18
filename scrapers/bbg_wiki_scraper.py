@@ -252,23 +252,62 @@ class BBGWikiScraper:
         return sections
     
     def extract_generic(self, soup: BeautifulSoup) -> List[Dict[str, Any]]:
+        """Generic extraction for other page types"""
         sections = []
-        item_divs = soup.find_all('div', class_='row', id=True)
         
-        for div in item_divs:
-            item_id = div.get('id', '')
+        current_category = None
+        
+        # Find all row divs in order
+        all_rows = soup.find_all('div', class_='row')
+        
+        for row in all_rows:
+            row_id = row.get('id', '')
             
-            if not item_id or item_id in ['footer-popup', 'donateText']:
+            # Skip common non-content IDs
+            if row_id and row_id in ['footer-popup', 'donateText']:
                 continue
             
-            item_name = unquote(item_id)
-            content_text = self.clean_text(div.get_text())
+            # Check if this is a category/era header (has ID and h2 or h3)
+            if row_id:
+                h2 = row.find('h2', class_='civ-name')
+                h3 = row.find('h3', class_='civ-name')
+                if h2:
+                    current_category = self.clean_text(h2.get_text())
+                    continue
+                elif h3:
+                    current_category = self.clean_text(h3.get_text())
+                    continue
             
-            if content_text and len(content_text) > 50:
-                sections.append({
-                    'heading': item_name,
-                    'content': [content_text]
-                })
+            # This is a content row (no ID or ID but has charts)
+            charts = row.find_all('div', class_='chart')
+            
+            for chart in charts:
+                # Find name (h2.civ-name)
+                name_h2 = chart.find('h2', class_='civ-name')
+                
+                if not name_h2:
+                    continue
+                
+                item_name = self.clean_text(name_h2.get_text())
+                
+                if not item_name:
+                    continue
+                
+                # Find all descriptions (p.civ-ability-desc)
+                desc_elems = chart.find_all('p', class_='civ-ability-desc')
+                
+                descriptions = []
+                for desc in desc_elems:
+                    desc_text = self.clean_text(desc.get_text())
+                    if desc_text and len(desc_text) > 10:
+                        descriptions.append(desc_text)
+                
+                if descriptions:
+                    heading = f"{current_category}: {item_name}" if current_category else item_name
+                    sections.append({
+                        'heading': heading,
+                        'content': descriptions
+                    })
         
         return sections
     
