@@ -367,6 +367,41 @@ class BBGWikiScraper:
         
         return sections
     
+    def extract_changelog(self, soup: BeautifulSoup) -> List[Dict[str, Any]]:
+        """Extract changelog: Category -> Subcategory -> Changes"""
+        sections = []
+        
+        current_category = None
+        
+        # Find the main chart div
+        main_chart = soup.find('div', class_='chart')
+        
+        if not main_chart:
+            return sections
+        
+        # Find all h1 and h2 headers and p descriptions in order
+        for element in main_chart.children:
+            if element.name == 'h1' and 'civ-name' in element.get('class', []):
+                # Main category (e.g., "Game Mechanics")
+                current_category = self.clean_text(element.get_text())
+            
+            elif element.name == 'h2' and 'civ-name' in element.get('class', []):
+                # Subcategory (e.g., "Global Changes", "Combat")
+                if current_category:
+                    subcategory = self.clean_text(element.get_text())
+                    
+                    # Look for the next p element
+                    next_p = element.find_next_sibling('p', class_='civ-ability-desc')
+                    if next_p:
+                        description = self.clean_text(next_p.get_text())
+                        if description and len(description) > 20:
+                            sections.append({
+                                'heading': f"{current_category}: {subcategory}",
+                                'content': [description]
+                            })
+        
+        return sections
+    
     def extract_generic(self, soup: BeautifulSoup) -> List[Dict[str, Any]]:
         """Generic extraction for other page types"""
         sections = []
@@ -454,6 +489,8 @@ class BBGWikiScraper:
             sections = self.extract_natural_wonders(soup)
         elif page_name == 'misc':
             sections = self.extract_misc(soup)
+        elif page_name == 'changelog':
+            sections = self.extract_changelog(soup)
         else:
             sections = self.extract_generic(soup)
         
