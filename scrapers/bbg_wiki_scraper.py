@@ -251,6 +251,39 @@ class BBGWikiScraper:
         
         return sections
     
+    def extract_natural_wonders(self, soup: BeautifulSoup) -> List[Dict[str, Any]]:
+        """Extract natural wonders - they use p.actual-text for descriptions"""
+        sections = []
+        
+        # Find all chart divs
+        charts = soup.find_all('div', class_='chart')
+        
+        for chart in charts:
+            # Find name (h2.civ-name)
+            name_h2 = chart.find('h2', class_='civ-name')
+            
+            if not name_h2:
+                continue
+            
+            wonder_name = self.clean_text(name_h2.get_text())
+            
+            if not wonder_name:
+                continue
+            
+            # Find description (p.actual-text - primary description for natural wonders)
+            desc_elem = chart.find('p', class_='actual-text')
+            
+            if desc_elem:
+                description = self.clean_text(desc_elem.get_text())
+                
+                if description and len(description) > 20:
+                    sections.append({
+                        'heading': wonder_name,
+                        'content': [description]
+                    })
+        
+        return sections
+    
     def extract_generic(self, soup: BeautifulSoup) -> List[Dict[str, Any]]:
         """Generic extraction for other page types"""
         sections = []
@@ -334,6 +367,8 @@ class BBGWikiScraper:
             sections = self.extract_governors(soup)
         elif page_name == 'great_people':
             sections = self.extract_great_people(soup)
+        elif page_name == 'natural_wonder':
+            sections = self.extract_natural_wonders(soup)
         else:
             sections = self.extract_generic(soup)
         
