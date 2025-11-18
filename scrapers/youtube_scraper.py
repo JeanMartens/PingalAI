@@ -221,6 +221,7 @@ class YouTubeScraper:
 def main():
     """Main scraping function"""
 
+    dotenv.load_dotenv()
     # Get API key from environment or user input
     api_key = os.getenv('YOUTUBE_API_KEY')
     
