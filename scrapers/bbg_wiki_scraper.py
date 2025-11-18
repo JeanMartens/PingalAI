@@ -21,7 +21,6 @@ class BBGWikiScraper:
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         })
         
-        # Define all pages and their categories (matches actual URLs)
         self.pages = {
             'leaders': 'leader',
             'bbg_expanded': 'expansion_content',
@@ -40,12 +39,9 @@ class BBGWikiScraper:
             'changelog': 'changelog',
         }
         
-        # All BBG versions (newest to oldest)
-        # self.versions = ['7.2', '7.1', '6.5', '6.4', '6.3', '6.2', '6.1', '6.0', '5.8', '5.7', '5.6', 'base_game']
         self.versions = ['7.2', '7.1']
     
     def get_page(self, url: str) -> BeautifulSoup:
-        """Fetch and parse a page"""
         try:
             response = self.session.get(url, timeout=10)
             response.raise_for_status()
@@ -54,25 +50,18 @@ class BBGWikiScraper:
             return None
     
     def clean_text(self, text: str) -> str:
-        """Clean extracted text"""
         if not text:
             return ""
         text = re.sub(r'\s+', ' ', text)
         return text.strip()
     
-    # ===== PAGE-SPECIFIC EXTRACTION METHODS =====
-    
     def extract_leaders(self, soup: BeautifulSoup) -> List[Dict[str, Any]]:
-        """Extract leaders - each leader in a div with ID and class='row'"""
         sections = []
-        
-        # Find all divs with IDs and class='row' (these are leaders)
         leader_divs = soup.find_all('div', class_='row', id=True)
         
         for div in leader_divs:
             leader_id = div.get('id', '')
             
-            # Skip non-leader IDs
             if not leader_id or leader_id in ['footer-popup', 'donateText']:
                 continue
             
@@ -88,14 +77,10 @@ class BBGWikiScraper:
         return sections
     
     def extract_city_states(self, soup: BeautifulSoup) -> List[Dict[str, Any]]:
-        """Extract city states - they use h2.civ-name, not IDs"""
         sections = []
-        
-        # Find all chart divs with h2.civ-name
         chart_divs = soup.find_all('div', class_='chart')
         
         for div in chart_divs:
-            # Look for h2 with class='civ-name'
             h2 = div.find('h2', class_='civ-name')
             
             if not h2:
@@ -106,7 +91,6 @@ class BBGWikiScraper:
             if not cs_name:
                 continue
             
-            # Get the description (p.actual-text)
             desc_elem = div.find('p', class_='actual-text')
             
             if desc_elem:
@@ -121,26 +105,19 @@ class BBGWikiScraper:
         return sections
     
     def extract_religion(self, soup: BeautifulSoup) -> List[Dict[str, Any]]:
-        """Extract religion beliefs with 3-level hierarchy: type -> name -> buff"""
         sections = []
-        
-        # Find all belief type sections (Pantheon, Follower, etc.)
         belief_type_divs = soup.find_all('div', class_='row', id=True)
         
         for type_div in belief_type_divs:
             belief_type_id = type_div.get('id', '')
             
-            # Skip non-belief IDs
             if not belief_type_id or belief_type_id in ['footer-popup', 'donateText']:
                 continue
             
-            belief_type = unquote(belief_type_id)  # e.g., "Pantheon", "Follower"
-            
-            # Find all col-lg-* divs within this type
+            belief_type = unquote(belief_type_id)
             col_divs = type_div.find_all('div', class_=lambda x: x and 'col-lg-' in x)
             
             for col in col_divs:
-                # Find the belief name (h2.civ-name)
                 h2 = col.find('h2', class_='civ-name')
                 
                 if not h2:
@@ -151,7 +128,6 @@ class BBGWikiScraper:
                 if not belief_name:
                     continue
                 
-                # Find the description (p.actual-text)
                 desc_elem = col.find('p', class_='actual-text')
                 
                 if desc_elem:
@@ -166,14 +142,10 @@ class BBGWikiScraper:
         return sections
     
     def extract_governors(self, soup: BeautifulSoup) -> List[Dict[str, Any]]:
-        """Extract governors - each promotion as a separate subsection"""
         sections = []
-        
-        # Find all chart divs (each is a governor)
         chart_divs = soup.find_all('div', class_='chart')
         
         for div in chart_divs:
-            # Find governor name (h2.civ-name)
             h2 = div.find('h2', class_='civ-name')
             
             if not h2:
@@ -184,11 +156,9 @@ class BBGWikiScraper:
             if not governor_name:
                 continue
             
-            # Find all promotions (h3.civ-ability-name) within this governor
             promotions = div.find_all('h3', class_='civ-ability-name')
             
             for h3 in promotions:
-                # Get promotion name - it's the text before the <br> or <p> tag
                 promotion_text = ""
                 for child in h3.children:
                     if child.name == 'br':
@@ -199,8 +169,6 @@ class BBGWikiScraper:
                         promotion_text += child
                 
                 promotion_name = self.clean_text(promotion_text)
-                
-                # Get the promotion description (p.civ-ability-desc within the h3)
                 desc_elem = h3.find('p', class_='civ-ability-desc')
                 
                 if desc_elem:
@@ -213,17 +181,83 @@ class BBGWikiScraper:
                         })
         
         return sections
-    def extract_generic(self, soup: BeautifulSoup) -> List[Dict[str, Any]]:
-        """Generic extraction for other page types"""
+    
+    def extract_great_people(self, soup: BeautifulSoup) -> List[Dict[str, Any]]:
+        """Extract great people: Type -> Era -> Name -> (Charges + Description)"""
         sections = []
         
-        # Find all divs with class='row' and IDs
+        current_type = None
+        current_era = None
+        
+        # Find all row divs in order
+        all_rows = soup.find_all('div', class_='row')
+        
+        for row in all_rows:
+            row_id = row.get('id', '')
+            
+            # Skip non-great-people IDs
+            if row_id and row_id in ['footer-popup', 'donateText']:
+                continue
+            
+            # Check if this is a type header (has ID and h2.civ-name)
+            if row_id:
+                h2 = row.find('h2', class_='civ-name')
+                if h2:
+                    current_type = self.clean_text(h2.get_text())
+                    current_era = None
+                    continue
+            
+            # Check if this is an era header (has ID and h3.civ-name)
+            if row_id:
+                h3 = row.find('h3', class_='civ-name')
+                if h3:
+                    current_era = self.clean_text(h3.get_text())
+                    continue
+            
+            # This must be a person row (no ID, has chart divs)
+            if not row_id and current_type and current_era:
+                charts = row.find_all('div', class_='chart')
+                
+                for chart in charts:
+                    # Find name (first p.civ-ability-name)
+                    name_elems = chart.find_all('p', class_='civ-ability-name')
+                    
+                    if not name_elems:
+                        continue
+                    
+                    gp_name = self.clean_text(name_elems[0].get_text())
+                    
+                    if not gp_name:
+                        continue
+                    
+                    # Check if second p.civ-ability-name has charges
+                    charges = "1"
+                    if len(name_elems) > 1:
+                        charges_text = self.clean_text(name_elems[1].get_text())
+                        if charges_text.isdigit():
+                            charges = charges_text
+                    
+                    # Find description (p.civ-ability-desc)
+                    desc_elem = chart.find('p', class_='civ-ability-desc')
+                    
+                    if desc_elem:
+                        description = self.clean_text(desc_elem.get_text())
+                        
+                        if description:
+                            sections.append({
+                                'heading': f"{current_type} - {current_era}: {gp_name}",
+                                'content': [f"Charges: {charges}", description]
+                            })
+        
+        return sections
+    
+    def extract_generic(self, soup: BeautifulSoup) -> List[Dict[str, Any]]:
+        sections = []
         item_divs = soup.find_all('div', class_='row', id=True)
         
         for div in item_divs:
             item_id = div.get('id', '')
             
-            # Skip common non-content IDs
             if not item_id or item_id in ['footer-popup', 'donateText']:
                 continue
             
@@ -238,10 +272,7 @@ class BBGWikiScraper:
         
         return sections
     
-    # ===== MAIN EXTRACTION METHOD =====
-    
     def extract_page_content(self, page_name: str, category: str, version: str) -> Dict[str, Any]:
-        """Extract content from a specific BBG page version"""
         url = f"{self.base_url}/en_US/{page_name}_{version}.html"
         
         print(f"    v{version}...", end=" ")
@@ -254,7 +285,6 @@ class BBGWikiScraper:
         version_display = "Base Game" if version == "base_game" else f"v{version}"
         title = f"BBG {page_name.replace('_', ' ').title()} {version_display}"
         
-        # Route to appropriate extraction method based on page name
         if page_name == 'leaders':
             sections = self.extract_leaders(soup)
         elif page_name == 'city_states':
@@ -263,6 +293,8 @@ class BBGWikiScraper:
             sections = self.extract_religion(soup)
         elif page_name == 'governor':
             sections = self.extract_governors(soup)
+        elif page_name == 'great_people':
+            sections = self.extract_great_people(soup)
         else:
             sections = self.extract_generic(soup)
         
@@ -287,7 +319,6 @@ class BBGWikiScraper:
         }
     
     def scrape_all_versions(self, page_name: str, category: str) -> List[Dict[str, Any]]:
-        """Scrape a page across all BBG versions"""
         results = []
         
         for version in self.versions:
@@ -299,7 +330,6 @@ class BBGWikiScraper:
         return results
     
     def scrape_all(self) -> Dict[str, List[Dict[str, Any]]]:
-        """Scrape all BBG pages across all versions"""
         all_data = {}
         
         print("\n" + "="*60)
@@ -325,7 +355,6 @@ class BBGWikiScraper:
         return all_data
     
     def save_to_json(self, data: Dict, filename: str):
-        """Save scraped data to JSON file"""
         with open(filename, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
         print(f"\n✓ Saved: {filename}")
