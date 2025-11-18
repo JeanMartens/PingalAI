@@ -252,14 +252,26 @@ class BBGWikiScraper:
         return sections
     
     def extract_natural_wonders(self, soup: BeautifulSoup) -> List[Dict[str, Any]]:
-        """Extract natural wonders - they use p.actual-text for descriptions"""
+        """Extract natural wonders - each has its own row with ID"""
         sections = []
         
-        # Find all chart divs
-        charts = soup.find_all('div', class_='chart')
+        # Find all row divs with IDs (each natural wonder)
+        all_rows = soup.find_all('div', class_='row', id=True)
         
-        for chart in charts:
-            # Find name (h2.civ-name)
+        for row in all_rows:
+            wonder_id = row.get('id', '')
+            
+            # Skip non-wonder IDs
+            if not wonder_id or wonder_id in ['footer-popup', 'donateText']:
+                continue
+            
+            # Find the chart div inside
+            chart = row.find('div', class_='chart')
+            
+            if not chart:
+                continue
+            
+            # Find name (h2.civ-name) - for verification
             name_h2 = chart.find('h2', class_='civ-name')
             
             if not name_h2:
@@ -281,6 +293,77 @@ class BBGWikiScraper:
                         'heading': wonder_name,
                         'content': [description]
                     })
+        
+        return sections
+    
+    def extract_misc(self, soup: BeautifulSoup) -> List[Dict[str, Any]]:
+        """Extract misc page: Dark Age Policies and Golden Age Dedications by era"""
+        sections = []
+        
+        current_era = None
+        
+        # Find all row divs in order
+        all_rows = soup.find_all('div', class_='row')
+        
+        for row in all_rows:
+            row_id = row.get('id', '')
+            
+            # Skip common non-content IDs
+            if row_id and row_id in ['footer-popup', 'donateText']:
+                continue
+            
+            # Check if this is an era header
+            if row_id:
+                h2 = row.find('h2', class_='civ-name')
+                if h2:
+                    era_name = self.clean_text(h2.get_text())
+                    if 'Era' in era_name:
+                        current_era = era_name
+                        continue
+            
+            if not current_era:
+                continue
+            
+            # Check if this row has a single chart with nested row (Golden Age Dedications)
+            charts = row.find_all('div', class_='chart', recursive=False)
+            
+            if len(charts) == 1:
+                # This might be Golden Age Dedications
+                nested_row = charts[0].find('div', class_='row')
+                if nested_row:
+                    # Find all dedication columns
+                    cols = nested_row.find_all('div', class_=lambda x: x and 'col-lg-' in x)
+                    for col in cols:
+                        desc_elem = col.find('p', class_='civ-ability-desc')
+                        if desc_elem:
+                            desc_text = self.clean_text(desc_elem.get_text())
+                            if desc_text and 'Golden Age' in desc_text:
+                                # Extract dedication name (everything before "Golden Age:")
+                                if 'Golden Age:' in desc_text:
+                                    dedication_name = desc_text.split('Golden Age:')[0].strip()
+                                    sections.append({
+                                        'heading': f"Golden Age Dedication - {current_era}: {dedication_name}",
+                                        'content': [desc_text]
+                                    })
+            else:
+                # Multiple charts - likely Dark Age Policies
+                for chart in charts:
+                    name_h2 = chart.find('h2', class_='civ-name')
+                    if not name_h2:
+                        continue
+                    
+                    policy_name = self.clean_text(name_h2.get_text())
+                    if not policy_name:
+                        continue
+                    
+                    desc_elem = chart.find('p', class_='civ-ability-desc')
+                    if desc_elem:
+                        desc_text = self.clean_text(desc_elem.get_text())
+                        if desc_text and len(desc_text) > 10:
+                            sections.append({
+                                'heading': f"Dark Age Policy - {current_era}: {policy_name}",
+                                'content': [desc_text]
+                            })
         
         return sections
     
@@ -369,6 +452,8 @@ class BBGWikiScraper:
             sections = self.extract_great_people(soup)
         elif page_name == 'natural_wonder':
             sections = self.extract_natural_wonders(soup)
+        elif page_name == 'misc':
+            sections = self.extract_misc(soup)
         else:
             sections = self.extract_generic(soup)
         
