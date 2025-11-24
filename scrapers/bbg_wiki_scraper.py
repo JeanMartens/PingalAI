@@ -66,12 +66,25 @@ class BBGWikiScraper:
                 continue
             
             leader_name = unquote(leader_id)
-            content_text = self.clean_text(div.get_text())
             
-            if content_text and len(content_text) > 100:
+            # Find the chart div
+            chart = div.find('div', class_='chart')
+            if not chart:
+                continue
+            
+            # Extract only the main descriptions (p.actual-text), skip base-game-text comparison divs
+            main_descs = chart.find_all('p', class_='actual-text')
+            
+            content_parts = []
+            for desc in main_descs:
+                text = self.clean_text(desc.get_text())
+                if text:
+                    content_parts.append(text)
+            
+            if content_parts:
                 sections.append({
                     'heading': leader_name,
-                    'content': [content_text]
+                    'content': content_parts
                 })
         
         return sections
@@ -559,7 +572,7 @@ class BBGWikiScraper:
 def main():
     scraper = BBGWikiScraper()
     all_data = scraper.scrape_all()
-    scraper.save_to_json(all_data, "data/raw/bbg_wiki/bbg_complete_data.json")
+    scraper.save_to_json(all_data, "data/raw/bbg_wiki/bbg_complete_data_v2.json")
     
     print("\n" + "="*60)
     print("COMPLETE")
