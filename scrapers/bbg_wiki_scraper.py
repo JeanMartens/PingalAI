@@ -39,7 +39,7 @@ class BBGWikiScraper:
             'changelog': 'changelog',
         }
         
-        self.versions = ['7.2', '7.1']
+        self.versions = ['7.2']
     
     def get_page(self, url: str) -> BeautifulSoup:
         try:

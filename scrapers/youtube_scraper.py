@@ -97,16 +97,18 @@ class YouTubeScraper:
             languages = ['en']
         
         try:
-            # Correct API call - it's a list method that returns transcript objects
-            transcript_list = YouTubeTranscriptApi.get_transcripts([video_id], languages=languages)
-            transcript_data = transcript_list[0][video_id]
+            # Correct API usage - fetch transcript
+            transcript = YouTubeTranscriptApi().fetch(video_id, languages=languages)
+            
+            # Convert to raw data
+            segments = transcript.to_raw_data()
             
             return {
                 'success': True,
-                'video_id': video_id,
-                'language': languages[0],
-                'is_generated': True,
-                'segments': transcript_data
+                'video_id': transcript.video_id,
+                'language': transcript.language,
+                'is_generated': transcript.is_generated,
+                'segments': segments
             }
             
         except TranscriptsDisabled:
@@ -235,7 +237,8 @@ def main():
     # Your playlists
     playlists = [
         'https://www.youtube.com/playlist?list=PLUmau0-sP9xFw-Z5DFakzS-kZ4-orHl28',
-        'https://www.youtube.com/playlist?list=PLUmau0-sP9xFMKZz6eMH15mrf3h-fhFCQ'
+        'https://www.youtube.com/playlist?list=PLUmau0-sP9xFMKZz6eMH15mrf3h-fhFCQ',
+        "https://www.youtube.com/playlist?list=PLPH212pgAjlLWfp6t2E44gUQbNOTVPdCp"
     ]
     
     # Scrape all playlists
